@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CreateMyCoin - 一键发币平台</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- 加载 Ethers.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🪙 CreateMyCoin</h1>
+            <p>最简单的ERC20代币创建平台 - 连接钱包，输入名称，一键发币</p>
+        </header>
+
+        <main>
+            <!-- 钱包连接状态 -->
+            <div class="wallet-section">
+                <div id="wallet-status" class="status-disconnected">
+                    🔴 未连接钱包
+                </div>
+                <button id="connect-wallet" class="btn btn-primary">连接 MetaMask</button>
+                <div id="network-info" class="network-info"></div>
+            </div>
+
+            <!-- 代币创建表单 -->
+            <div class="form-section" id="token-form" style="display: none;">
+                <h2>创建您的代币</h2>
+
+                <div class="form-group">
+                    <label for="token-name">代币名称 *</label>
+                    <input type="text" id="token-name" placeholder="例如: My Token" value="MyToken">
+                    <small>代币的全名，如 "Ethereum"</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="token-symbol">代币符号 *</label>
+                    <input type="text" id="token-symbol" placeholder="例如: MTK" value="MTK">
+                    <small>通常3-5个字符，如 "ETH"</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="initial-supply">初始发行量 *</label>
+                    <input type="number" id="initial-supply" placeholder="例如: 1000000" value="1000000" min="1">
+                    <small>将铸造到您的钱包</small>
+                </div>
+
+                <!-- 高级选项（可折叠） -->
+                <details class="advanced-settings">
+                    <summary>⚙️ 高级设置 (可选)</summary>
+
+                    <div class="form-group">
+                        <label for="decimals">精度 (decimals)</label>
+                        <input type="number" id="decimals" value="18" min="0" max="18">
+                        <small>代币小数位数，默认18</small>
+                    </div>
+
+                    <div class="checkbox-group">
+                        <label>
+                            <input type="checkbox" id="mintable" checked> Mintable (可增发)
+                        </label>
+                        <label>
+                            <input type="checkbox" id="burnable" checked> Burnable (可销毁)
+                        </label>
+                        <label>
+                            <input type="checkbox" id="pausable"> Pausable (可暂停)
+                        </label>
+                        <label>
+                            <input type="checkbox" id="permit"> Permit (离线授权)
+                        </label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="network-select">部署网络</label>
+                        <select id="network-select">
+                            <option value="sepolia" data-chainid="11155111">Sepolia 测试网</option>
+                            <option value="goerli" data-chainid="5">Goerli 测试网</option>
+                            <option value="mainnet" data-chainid="1">Ethereum 主网</option>
+                            <option value="polygon" data-chainid="137">Polygon</option>
+                            <option value="bsc" data-chainid="56">BSC</option>
+                        </select>
+                    </div>
+                </details>
+
+                <button id="deploy-token" class="btn btn-success" disabled>部署代币</button>
+            </div>
+
+            <!-- 部署状态显示 -->
+            <div class="status-section" id="status-section" style="display: none;">
+                <h3>部署状态</h3>
+                <div class="progress-steps">
+                    <div class="step" id="step-prepare">🔄 准备部署...</div>
+                    <div class="step" id="step-sign">✍️ 等待钱包签名...</div>
+                    <div class="step" id="step-deploy">⛓️ 部署交易已发送...</div>
+                    <div class="step" id="step-confirm">✅ 交易确认中...</div>
+                </div>
+
+                <div class="result-info" id="result-info">
+                    <p><strong>交易哈希:</strong> <span id="tx-hash">-</span></p>
+                    <p><strong>合约地址:</strong> <span id="contract-address">-</span></p>
+                    <p><strong>区块浏览器:</strong> <a href="#" id="explorer-link" target="_blank">查看交易</a></p>
+                </div>
+
+                <button id="create-new" class="btn btn-secondary">创建新代币</button>
+            </div>
+
+            <!-- 最近项目列表 -->
+            <div class="recent-projects">
+                <h3>📋 最近创建的项目</h3>
+                <div id="projects-list" class="projects-list">
+                    <p class="loading">加载中...</p>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>CreateMyCoin v1.0 - 安全提示: 您通过钱包签名部署合约，我们永不接触您的私钥</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
