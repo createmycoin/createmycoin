@@ -578,11 +578,13 @@ function resetWalletState() {
     const connectBtn = document.getElementById('connect-wallet');
     connectBtn.textContent = '连接 MetaMask';
     connectBtn.onclick = connectWallet;
+    connectBtn.style.display = 'block';
 
     document.getElementById('switch-wallet').style.display = 'none';
     document.getElementById('token-form').style.display = 'none';
     document.getElementById('deploy-token').disabled = true;
     document.getElementById('network-info').innerHTML = '';
+
 
     hideSwitchNetworkButton();
 }
