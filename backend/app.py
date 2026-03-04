@@ -171,12 +171,32 @@ def get_stats():
 def compile_contract():
     """编译合约，返回字节码和ABI"""
     try:
-        # 方法1：使用solc命令行（需要安装solc）
-        cmd = f"solc --bin --abi --optimize --overwrite {CONTRACT_PATH} -o {COMPILED_DIR}"
-        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+        # 获取 OpenZeppelin 库的路径
+        import subprocess
+        import json
+
+        # 查找 node_modules 路径
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # 项目根目录
+        node_modules_path = os.path.join(base_dir, 'node_modules')
+
+        # 方法1：使用命令行编译，指定库路径
+        cmd = [
+            'solc',
+            '--bin',
+            '--abi',
+            '--optimize',
+            '--overwrite',
+            '--include-path', node_modules_path,  # 添加库路径
+            '--base-path', base_dir,  # 基础路径
+            '-o', COMPILED_DIR,
+            CONTRACT_PATH
+        ]
+
+        result = subprocess.run(cmd, capture_output=True, text=True)
 
         if result.returncode != 0:
-            print(f"编译警告: {result.stderr}")
+            print(f"编译错误: {result.stderr}")
+            return None
 
         # 读取编译结果
         contract_name = "CreateMyCoinToken"
@@ -189,7 +209,6 @@ def compile_contract():
             with open(abi_file, 'r') as f:
                 abi = json.load(f)
 
-            # 保存完整信息
             contract_info = {
                 'bytecode': bytecode,
                 'abi': abi,
@@ -198,12 +217,13 @@ def compile_contract():
                 'updatedAt': datetime.now().isoformat()
             }
 
-            # 缓存到文件
             with open(os.path.join(COMPILED_DIR, 'contract_info.json'), 'w') as f:
                 json.dump(contract_info, f, indent=2)
 
+            print("✅ 合约编译成功！")
             return contract_info
         else:
+            print("❌ 编译文件未生成")
             return None
 
     except Exception as e:

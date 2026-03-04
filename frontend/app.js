@@ -10,24 +10,57 @@ let walletConnected = false;
 // API 基础URL
 const API_BASE_URL = 'http://localhost:5000/api';
 
-// 合约字节码（实际项目中应该从编译后的文件获取）
-const CONTRACT_BYTECODE = "0x"; // 实际部署时需要替换
+// 删除原来的 CONTRACT_BYTECODE 和 CONTRACT_ABI 常量定义
+// 改为动态获取
 
-// 合约ABI（简化版）
-const CONTRACT_ABI = [
-    "constructor(string name, string symbol, uint256 initialSupply, address owner, bool mintable, bool burnable, bool pausable, bool permit)",
-    "function name() view returns (string)",
-    "function symbol() view returns (string)",
-    "function decimals() view returns (uint8)",
-    "function totalSupply() view returns (uint256)",
-    "function balanceOf(address) view returns (uint256)",
-    "function transfer(address to, uint256 amount) returns (bool)",
-    "function mint(address to, uint256 amount)",
-    "function burn(uint256 amount)",
-    "function pause()",
-    "function unpause()",
-    "event Transfer(address indexed from, address indexed to, uint256 value)"
-];
+let CONTRACT_BYTECODE = "";
+let CONTRACT_ABI = [];
+let contractInfoLoaded = false;
+
+// 页面加载时获取合约信息
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadContractInfo();
+    initEventListeners();
+    checkWalletConnection();
+    loadRecentProjects();
+    setInterval(loadRecentProjects, 30000);
+});
+
+// 从后端加载合约信息
+async function loadContractInfo() {
+    try {
+        showLoading('加载合约信息...');
+
+        const response = await fetch(`${API_BASE_URL}/contract-info`);
+        const result = await response.json();
+
+        if (result.success && result.data) {
+            CONTRACT_BYTECODE = result.data.bytecode;
+            CONTRACT_ABI = result.data.abi;
+            contractInfoLoaded = true;
+            console.log('✅ 合约信息加载成功');
+            console.log('字节码长度:', CONTRACT_BYTECODE.length);
+        } else {
+            console.error('加载合约信息失败:', result.error);
+            // 使用备用ABI（至少让界面能工作）
+            CONTRACT_ABI = [
+                "constructor(string name, string symbol, uint256 initialSupply, address owner, bool mintable, bool burnable, bool pausable, bool permit)",
+                "function name() view returns (string)",
+                "function symbol() view returns (string)",
+                "function decimals() view returns (uint8)",
+                "function totalSupply() view returns (uint256)",
+                "function balanceOf(address) view returns (uint256)"
+            ];
+            showNotification('⚠️ 使用备用合约配置', 'warning');
+        }
+
+        hideLoading();
+    } catch (error) {
+        console.error('加载合约信息失败:', error);
+        hideLoading();
+        showNotification('⚠️ 无法加载合约配置', 'warning');
+    }
+}
 
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', () => {
@@ -778,6 +811,13 @@ async function deployToken() {
         return;
     }
 
+    // 检查合约信息是否加载
+    if (!contractInfoLoaded || !CONTRACT_BYTECODE || CONTRACT_BYTECODE === '0x') {
+        showNotification('❌ 合约配置未加载，请刷新页面重试', 'error');
+        return;
+    }
+
+
     // 获取表单数据
     const tokenName = document.getElementById('token-name').value;
     const tokenSymbol = document.getElementById('token-symbol').value;
@@ -857,6 +897,7 @@ async function deployToken() {
         // 获取合约地址
         const contractAddress = await contract.getAddress();
         document.getElementById('contract-address').textContent = contractAddress;
+        document.getElementById('contract-address').href = `https://${selectedNetwork}.etherscan.io/address/${contractAddress}`;
 
 
         // 更新步骤
