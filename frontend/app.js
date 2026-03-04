@@ -6,18 +6,17 @@ let userAddress;
 let chainId;
 let currentProjectId = null;
 let walletConnected = false;
+let isConnecting = false; // 新增：连接状态锁，防止重复请求
 
 // API 基础URL
 const API_BASE_URL = 'http://localhost:5000/api';
 
-// 删除原来的 CONTRACT_BYTECODE 和 CONTRACT_ABI 常量定义
-// 改为动态获取
-
+// 合约信息
 let CONTRACT_BYTECODE = "";
 let CONTRACT_ABI = [];
 let contractInfoLoaded = false;
 
-// 页面加载时获取合约信息
+// 页面加载时初始化
 document.addEventListener('DOMContentLoaded', async () => {
     await loadContractInfo();
     initEventListeners();
@@ -42,7 +41,7 @@ async function loadContractInfo() {
             console.log('字节码长度:', CONTRACT_BYTECODE.length);
         } else {
             console.error('加载合约信息失败:', result.error);
-            // 使用备用ABI（至少让界面能工作）
+            // 使用备用ABI
             CONTRACT_ABI = [
                 "constructor(string name, string symbol, uint256 initialSupply, address owner, bool mintable, bool burnable, bool pausable, bool permit)",
                 "function name() view returns (string)",
@@ -62,16 +61,6 @@ async function loadContractInfo() {
     }
 }
 
-// 页面加载完成后初始化
-document.addEventListener('DOMContentLoaded', () => {
-    initEventListeners();
-    checkWalletConnection();
-    loadRecentProjects();
-
-    // 定期刷新最近项目
-    setInterval(loadRecentProjects, 30000); // 每30秒刷新一次
-});
-
 // 初始化事件监听
 function initEventListeners() {
     const connectBtn = document.getElementById('connect-wallet');
@@ -84,10 +73,10 @@ function initEventListeners() {
     createNewBtn.addEventListener('click', resetForm);
 
     const networkSelect = document.getElementById('network-select');
-    networkSelect.addEventListener('change', updateNetworkInfo);
+    networkSelect.addEventListener('change', () => updateNetworkInfo(true));
 
-    // 添加钱包切换按钮
     addWalletSwitchButton();
+    addRefreshNetworkButton(); // 新增：添加刷新网络按钮
 }
 
 // 添加钱包切换按钮
@@ -104,9 +93,38 @@ function addWalletSwitchButton() {
         switchBtn.style.display = 'none';
         switchBtn.addEventListener('click', switchWallet);
 
-        // 插入到连接按钮后面
         const connectBtn = document.getElementById('connect-wallet');
         connectBtn.parentNode.insertBefore(switchBtn, connectBtn.nextSibling);
+    }
+}
+
+// 新增：添加手动刷新网络按钮
+function addRefreshNetworkButton() {
+    const networkInfoEl = document.getElementById('network-info');
+    const existingBtn = document.getElementById('refresh-network');
+
+    if (!existingBtn && networkInfoEl) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.id = 'refresh-network';
+        refreshBtn.textContent = '🔄 刷新网络';
+        refreshBtn.style.cssText = `
+            margin-left: 10px;
+            padding: 2px 8px;
+            font-size: 12px;
+            border: none;
+            border-radius: 3px;
+            background: #17a2b8;
+            color: white;
+            cursor: pointer;
+        `;
+        refreshBtn.addEventListener('click', async () => {
+            if (provider) {
+                provider = new ethers.BrowserProvider(window.ethereum);
+                await updateNetworkInfo(false);
+                showNotification('🔄 已刷新网络状态', 'info');
+            }
+        });
+        networkInfoEl.appendChild(refreshBtn);
     }
 }
 
@@ -118,32 +136,30 @@ async function switchWallet() {
     }
 
     try {
-        // 请求连接，MetaMask 会弹出账户选择界面
+        isConnecting = true;
         const accounts = await window.ethereum.request({
             method: 'eth_requestAccounts'
         });
 
-        // 更新 provider 和 signer
         provider = new ethers.BrowserProvider(window.ethereum);
         signer = await provider.getSigner();
         userAddress = accounts[0];
 
-        // 获取网络信息
         const network = await provider.getNetwork();
         chainId = Number(network.chainId);
 
-        // 显示切换成功的提示
         showNotification(`✅ 已切换到账户: ${formatAddress(userAddress)}`, 'success');
-
-        // 更新UI
         updateWalletUI();
-
-        // 重新加载该钱包的项目
         loadUserProjects(userAddress);
+        isConnecting = false;
 
     } catch (error) {
+        isConnecting = false;
         console.error('切换钱包失败:', error);
-        showNotification('❌ 切换钱包失败: ' + error.message, 'error');
+        // 仅在非用户取消时提示错误
+        if (error.code !== 4001) {
+            showNotification('❌ 切换钱包失败: ' + error.message, 'error');
+        }
     }
 }
 
@@ -153,9 +169,8 @@ async function checkWalletConnection() {
         try {
             const accounts = await window.ethereum.request({method: 'eth_accounts'});
             if (accounts.length > 0) {
-                await connectWallet();
+                await connectWallet(true); // 静默连接（不显示加载）
             } else {
-                // 没有连接的钱包，显示断开状态
                 resetWalletState();
             }
         } catch (error) {
@@ -163,7 +178,6 @@ async function checkWalletConnection() {
             resetWalletState();
         }
     } else {
-        // 没有安装 MetaMask
         showMetaMaskInstallPrompt();
     }
 }
@@ -179,16 +193,24 @@ function showMetaMaskInstallPrompt() {
     connectBtn.onclick = () => window.open('https://metamask.io/download.html', '_blank');
 }
 
-// 连接钱包
-async function connectWallet() {
+// 连接钱包（核心修复：添加静默连接参数+状态锁）
+async function connectWallet(isSilent = false) {
+    // 防止重复连接
+    if (isConnecting) {
+        showNotification('🔄 正在连接钱包中，请稍候', 'info');
+        return;
+    }
+
     if (typeof window.ethereum === 'undefined') {
         showMetaMaskInstallPrompt();
         return;
     }
 
     try {
-        // 显示加载状态
-        showLoading('正在连接钱包...');
+        isConnecting = true;
+        if (!isSilent) {
+            showLoading('正在连接钱包...');
+        }
 
         // 请求连接
         const accounts = await window.ethereum.request({
@@ -216,28 +238,33 @@ async function connectWallet() {
         // 显示表单
         document.getElementById('token-form').style.display = 'block';
 
-        // 显示切换按钮
-        // document.getElementById('switch-wallet').style.display = 'inline-block';
-
         // 监听账户和网络变化
         setupWalletListeners();
 
         // 加载该钱包的项目
         loadUserProjects(userAddress);
 
-        // 隐藏加载状态
-        hideLoading();
-
-        showNotification('✅ 钱包连接成功！', 'success');
+        if (!isSilent) {
+            hideLoading();
+            showNotification('✅ 钱包连接成功！', 'success');
+        }
 
     } catch (error) {
-        hideLoading();
+        isConnecting = false; // 重置连接状态
+        if (!isSilent) {
+            hideLoading();
+        }
         console.error('连接钱包失败:', error);
 
+        // 核心修复：仅在非用户主动取消时提示错误
         if (error.code === 4001) {
-            // 用户拒绝了连接请求
-            showNotification('❌ 您拒绝了连接请求', 'error');
+            // 用户拒绝连接，友好提示而非错误
+            showNotification('ℹ️ 您取消了钱包连接请求', 'info');
+        } else if (error.code === -32002) {
+            // MetaMask 正在处理请求，避免重复提示
+            showNotification('🔄 MetaMask 正在处理请求，请稍候', 'info');
         } else {
+            // 真正的连接错误才提示失败
             showNotification('❌ 连接钱包失败: ' + error.message, 'error');
         }
     }
@@ -255,7 +282,7 @@ function updateWalletUI(balanceInEth = '0') {
 
     document.getElementById('deploy-token').disabled = false;
 
-    updateNetworkInfo();
+    updateNetworkInfo(false); // 禁用自动切换
 }
 
 // 格式化地址
@@ -264,11 +291,13 @@ function formatAddress(address) {
     return address.substring(0, 6) + '...' + address.substring(38);
 }
 
-// 更新网络信息
-async function updateNetworkInfo() {
+// 更新网络信息（包含自动切换逻辑）
+async function updateNetworkInfo(shouldAutoSwitch = true) {
     if (!provider) return;
 
     try {
+        hideSwitchNetworkButton();
+
         const network = await provider.getNetwork();
         const currentChainId = Number(network.chainId);
         const networkName = getNetworkName(currentChainId);
@@ -279,7 +308,6 @@ async function updateNetworkInfo() {
         const networkInfo = document.getElementById('network-info');
         const deployBtn = document.getElementById('deploy-token');
 
-        // 检查是否支持当前网络
         const isSupported = Object.values(supportedNetworks).some(n => n.chainId === currentChainId);
 
         if (!isSupported) {
@@ -287,23 +315,47 @@ async function updateNetworkInfo() {
                                      <small style="color: #ff6b6b">不支持的网络，请切换到支持的网络</small>`;
             networkInfo.style.color = '#ff6b6b';
             deployBtn.disabled = true;
-            showNetworkSwitchPrompt(currentChainId);
+            showSupportedNetworksPrompt();
         } else if (currentChainId !== selectedChainId) {
-            networkInfo.innerHTML = `⚠️ 当前网络: ${networkName} (${currentChainId})<br>
-                                     <small style="color: #ff6b6b">请切换到 ${selectedOption.text}</small>`;
-            networkInfo.style.color = '#ff6b6b';
+            networkInfo.innerHTML = `🔄 准备切换到 ${selectedOption.text}...`;
+            networkInfo.style.color = '#17a2b8';
             deployBtn.disabled = true;
 
-            // 显示切换网络按钮
-            showSwitchNetworkButton(selectedChainId);
+            if (shouldAutoSwitch) {
+                try {
+                    await switchNetwork(selectedChainId);
+                    const newNetwork = await provider.getNetwork();
+                    const newChainId = Number(newNetwork.chainId);
+
+                    if (newChainId === selectedChainId) {
+                        networkInfo.innerHTML = `✅ 当前网络: ${getNetworkName(newChainId)}`;
+                        networkInfo.style.color = '#28a745';
+                        deployBtn.disabled = false;
+                    } else {
+                        throw new Error('切换未生效');
+                    }
+                } catch (switchError) {
+                    console.error('自动切换网络失败:', switchError);
+                    networkInfo.innerHTML = `⚠️ 当前网络: ${networkName} (${currentChainId})<br>
+                                             <small style="color: #ff6b6b">请切换到 ${selectedOption.text}</small>`;
+                    networkInfo.style.color = '#ff6b6b';
+                    showSwitchNetworkButton(selectedChainId);
+                }
+            } else {
+                networkInfo.innerHTML = `⚠️ 当前网络: ${networkName} (${currentChainId})<br>
+                                         <small style="color: #ff6b6b">请切换到 ${selectedOption.text}</small>`;
+                networkInfo.style.color = '#ff6b6b';
+                showSwitchNetworkButton(selectedChainId);
+            }
         } else {
             networkInfo.innerHTML = `✅ 当前网络: ${networkName}`;
             networkInfo.style.color = '#28a745';
             deployBtn.disabled = false;
-            hideSwitchNetworkButton();
         }
     } catch (error) {
         console.error('更新网络信息失败:', error);
+        hideLoading();
+        showNotification('❌ 网络状态检测失败，请刷新页面', 'error');
     }
 }
 
@@ -363,38 +415,54 @@ function hideSwitchNetworkButton() {
     }
 }
 
-// 切换网络
+// 切换网络（优化失败处理）
 async function switchNetwork(targetChainId) {
     if (!window.ethereum) return;
 
     try {
         showLoading(`正在切换到 ${getNetworkName(targetChainId)}...`);
+        provider = new ethers.BrowserProvider(window.ethereum);
 
         await window.ethereum.request({
             method: 'wallet_switchEthereumChain',
             params: [{chainId: '0x' + targetChainId.toString(16)}],
         });
 
-        // 网络切换后，等待一下让provider更新
         setTimeout(async () => {
-            await updateNetworkInfo();
-            hideLoading();
-            showNotification(`✅ 已切换到 ${getNetworkName(targetChainId)}`, 'success');
-        }, 1000);
+            provider = new ethers.BrowserProvider(window.ethereum);
+            signer = await provider.getSigner();
+
+            const actualNetwork = await provider.getNetwork();
+            const actualChainId = Number(actualNetwork.chainId);
+
+            if (actualChainId === targetChainId) {
+                await updateNetworkInfo(false);
+                hideLoading();
+                showNotification(`✅ 已切换到 ${getNetworkName(targetChainId)}`, 'success');
+            } else {
+                hideLoading();
+                showNotification(`⚠️ 网络切换未生效，请手动在MetaMask中切换`, 'warning');
+                await updateNetworkInfo(false);
+            }
+        }, 1500);
 
     } catch (switchError) {
-        // 如果网络不存在，尝试添加
+        hideLoading();
+        provider = new ethers.BrowserProvider(window.ethereum);
+        await updateNetworkInfo(false);
+
         if (switchError.code === 4902) {
             try {
                 await addNetwork(targetChainId);
             } catch (addError) {
-                hideLoading();
-                showNotification('❌ 添加网络失败', 'error');
+                showNotification('❌ 添加网络失败，请手动添加', 'error');
             }
+        } else if (switchError.code === 4001) {
+            showNotification('❌ 您拒绝了网络切换请求', 'error');
         } else {
-            hideLoading();
-            showNotification('❌ 切换网络失败', 'error');
+            showNotification(`❌ 切换网络失败: ${switchError.message}`, 'error');
         }
+        console.error('切换网络失败:', switchError);
     }
 }
 
@@ -438,9 +506,14 @@ function getNetworkName(chainId) {
     return networks[chainId] || `未知网络 (${chainId})`;
 }
 
+// 新增：显示支持的网络提示
+function showSupportedNetworksPrompt() {
+    const supportedList = Object.values(supportedNetworks).map(n => n.name).join('、');
+    showNotification(`⚠️ 请切换到支持的网络：${supportedList}`, 'warning');
+}
+
 // 设置钱包监听器
 function setupWalletListeners() {
-    // 移除之前的监听器
     window.ethereum.removeAllListeners('accountsChanged');
     window.ethereum.removeAllListeners('chainChanged');
     window.ethereum.removeAllListeners('disconnect');
@@ -450,16 +523,13 @@ function setupWalletListeners() {
         console.log('账户变化:', accounts);
 
         if (accounts.length === 0) {
-            // 用户断开了连接
             showNotification('🔌 钱包已断开连接', 'info');
             resetWalletState();
         } else {
-            // 用户切换了账户
             userAddress = accounts[0];
             provider = new ethers.BrowserProvider(window.ethereum);
             signer = await provider.getSigner();
 
-            // 获取新账户余额
             const balance = await provider.getBalance(userAddress);
             const balanceInEth = ethers.formatEther(balance);
 
@@ -470,20 +540,19 @@ function setupWalletListeners() {
         }
     });
 
-    // 监听网络变化
+    // 监听网络变化（修复核心）
     window.ethereum.on('chainChanged', (newChainId) => {
         console.log('网络变化:', newChainId);
         chainId = parseInt(newChainId, 16);
 
-        // 刷新页面或更新UI（推荐更新UI而不是刷新）
         setTimeout(async () => {
             provider = new ethers.BrowserProvider(window.ethereum);
             signer = await provider.getSigner();
-            await updateNetworkInfo();
+            await updateNetworkInfo(false);
 
             const networkName = getNetworkName(chainId);
             showNotification(`🔄 网络已切换到 ${networkName}`, 'info');
-        }, 1000);
+        }, 1500);
     });
 
     // 监听断开连接
@@ -500,6 +569,7 @@ function resetWalletState() {
     provider = null;
     signer = null;
     walletConnected = false;
+    isConnecting = false; // 重置连接状态
 
     const statusEl = document.getElementById('wallet-status');
     statusEl.textContent = '🔴 未连接钱包';
@@ -567,8 +637,6 @@ async function showProjectDetails(projectId) {
     try {
         const response = await fetch(`${API_BASE_URL}/projects/${projectId}`);
         const project = await response.json();
-
-        // 创建模态框显示详细信息
         showProjectModal(project);
     } catch (error) {
         console.error('获取项目详情失败:', error);
@@ -578,7 +646,6 @@ async function showProjectDetails(projectId) {
 
 // 显示项目详情模态框
 function showProjectModal(project) {
-    // 创建模态框（简化版，实际可以使用现成的UI库）
     const modalHtml = `
         <div class="modal" id="project-modal">
             <div class="modal-content">
@@ -602,7 +669,6 @@ function showProjectModal(project) {
         </div>
     `;
 
-    // 添加到页面
     const existingModal = document.getElementById('project-modal');
     if (existingModal) {
         existingModal.remove();
@@ -679,7 +745,6 @@ function showLoading(message = '加载中...') {
         `;
         document.body.appendChild(loadingEl);
 
-        // 添加样式
         const style = document.createElement('style');
         style.textContent = `
             #loading-overlay {
@@ -730,12 +795,10 @@ function hideLoading() {
 
 // 显示通知
 function showNotification(message, type = 'info') {
-    // 创建通知元素
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.textContent = message;
 
-    // 添加样式
     notification.style.cssText = `
         position: fixed;
         top: 20px;
@@ -749,7 +812,6 @@ function showNotification(message, type = 'info') {
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     `;
 
-    // 根据类型设置颜色
     const colors = {
         success: '#28a745',
         error: '#dc3545',
@@ -758,7 +820,6 @@ function showNotification(message, type = 'info') {
     };
     notification.style.backgroundColor = colors[type] || colors.info;
 
-    // 添加动画样式
     const style = document.createElement('style');
     style.textContent = `
         @keyframes slideIn {
@@ -786,7 +847,6 @@ function showNotification(message, type = 'info') {
 
     document.body.appendChild(notification);
 
-    // 3秒后移除
     setTimeout(() => {
         notification.style.animation = 'slideOut 0.3s ease';
         setTimeout(() => {
@@ -811,26 +871,21 @@ async function deployToken() {
         return;
     }
 
-    // 检查合约信息是否加载
     if (!contractInfoLoaded || !CONTRACT_BYTECODE || CONTRACT_BYTECODE === '0x') {
         showNotification('❌ 合约配置未加载，请刷新页面重试', 'error');
         return;
     }
 
-
-    // 获取表单数据
     const tokenName = document.getElementById('token-name').value;
     const tokenSymbol = document.getElementById('token-symbol').value;
     const initialSupply = document.getElementById('initial-supply').value;
     const decimals = parseInt(document.getElementById('decimals').value);
 
-    // 验证
     if (!tokenName || !tokenSymbol || !initialSupply) {
         alert('请填写所有必填字段');
         return;
     }
 
-    // 获取功能开关
     const features = {
         mintable: document.getElementById('mintable').checked,
         burnable: document.getElementById('burnable').checked,
@@ -841,27 +896,21 @@ async function deployToken() {
     const selectedNetwork = document.getElementById('network-select').value;
     const selectedChainId = parseInt(document.getElementById('network-select').selectedOptions[0].dataset.chainid);
 
-    // 检查网络
     if (chainId !== selectedChainId) {
         alert(`请先在 MetaMask 中切换到 ${document.getElementById('network-select').selectedOptions[0].text}`);
         return;
     }
 
     try {
-        // 显示状态面板
         document.getElementById('status-section').style.display = 'block';
         document.getElementById('token-form').style.display = 'none';
 
-        // 更新步骤
         updateStep('step-prepare', true);
 
-        // 准备部署数据
         const supplyWithDecimals = ethers.parseUnits(initialSupply, decimals);
 
-        // 创建合约工厂
         updateStep('step-sign', true);
 
-        // 部署合约
         const factory = new ethers.ContractFactory(
             CONTRACT_ABI,
             CONTRACT_BYTECODE,
@@ -869,9 +918,7 @@ async function deployToken() {
         );
 
         updateStep('step-prepare', false, true);
-        updateStep('step-deploy', true);
 
-        // 部署合约
         const contract = await factory.deploy(
             tokenName,
             tokenSymbol,
@@ -882,28 +929,23 @@ async function deployToken() {
             features.pausable,
             features.permit
         );
+        updateStep('step-deploy', true);
 
-        // 显示交易哈希
         document.getElementById('tx-hash').textContent = contract.deploymentTransaction().hash;
         updateExplorerLink(contract.deploymentTransaction().hash);
 
+        updateStep('step-sign', false, true);
         updateStep('step-deploy', false, true);
         updateStep('step-confirm', true);
 
-        // 等待部署完成
         await contract.waitForDeployment();
 
-
-        // 获取合约地址
         const contractAddress = await contract.getAddress();
         document.getElementById('contract-address').textContent = contractAddress;
         document.getElementById('contract-address').href = `https://${selectedNetwork}.etherscan.io/address/${contractAddress}`;
 
-
-        // 更新步骤
         updateStep('step-confirm', false, true);
 
-        // 保存到后端
         await saveProjectToBackend({
             wallet_address: userAddress,
             token_name: tokenName,
@@ -918,22 +960,17 @@ async function deployToken() {
             deployer_address: userAddress
         });
 
-        // 加载最近项目
         loadRecentProjects();
-
-        // 显示成功信息
         showNotification('✅ 代币部署成功！', 'success');
 
     } catch (error) {
         console.error('部署失败:', error);
         showNotification('❌ 部署失败: ' + error.message, 'error');
 
-        // 重置状态
         document.getElementById('status-section').style.display = 'none';
         document.getElementById('token-form').style.display = 'block';
     }
 }
-
 
 // 更新步骤状态
 function updateStep(stepId, isActive = false, isCompleted = false) {
@@ -992,12 +1029,10 @@ function resetForm() {
     document.getElementById('status-section').style.display = 'none';
     document.getElementById('token-form').style.display = 'block';
 
-    // 重置步骤状态
     ['step-prepare', 'step-sign', 'step-deploy', 'step-confirm'].forEach(stepId => {
         document.getElementById(stepId).classList.remove('active', 'completed');
     });
 
-    // 清空结果
     document.getElementById('tx-hash').textContent = '-';
     document.getElementById('contract-address').textContent = '-';
 }

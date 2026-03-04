@@ -175,21 +175,72 @@ main {
 }
 
 .step {
-    padding: 10px;
-    margin: 5px 0;
-    background: white;
-    border-radius: 5px;
-    border-left: 3px solid #ddd;
+    padding: 12px 15px; /* 加大内边距，视觉更突出 */
+    margin: 8px 0; /* 加大外边距，避免拥挤 */
+    background: #f0f0f0; /* 更干净的浅灰，区别于旧的深灰 */
+    border-radius: 6px;
+    /* 加粗左侧边框+轻微阴影，提升视觉权重 */
+    border-left: 5px solid #cccccc;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    /* 过渡动画，切换状态时更丝滑 */
+    transition: all 0.2s ease;
 }
 
+/* 进行中：高饱和度蓝紫调，对比强烈 */
 .step.active {
-    border-left-color: #667eea;
-    background: #e8eaf6;
+    border-left-color: #5a67d8; /* 更深更饱和的蓝紫 */
+    background: #f3f4f9; /* 浅蓝底，与默认灰形成明显区分 */
+    /* 增加右侧小标识+强化阴影，视觉更醒目 */
+    box-shadow: 0 2px 8px rgba(90, 103, 216, 0.15);
+    position: relative;
 }
 
+/* 新增右侧“进行中”小三角标识，强化状态 */
+.step.active::after {
+    content: "";
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #5a67d8;
+    /* 呼吸动画，吸引注意力 */
+    animation: pulse 1.5s infinite;
+}
+
+/* 已完成：高饱和度绿色调，视觉更突出 */
 .step.completed {
-    border-left-color: #28a745;
-    background: #d4edda;
+    border-left-color: #22c55e; /* 更亮更饱和的绿 */
+    background: #f0fdf4; /* 浅绿底，辨识度高 */
+    box-shadow: 0 2px 8px rgba(34, 197, 94, 0.15);
+    position: relative;
+}
+
+/* 新增右侧对勾标识，直观体现“完成” */
+.step.completed::after {
+    content: "✓";
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #22c55e;
+    font-size: 16px;
+    font-weight: bold;
+}
+
+/* 呼吸动画关键帧（仅用于active状态） */
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.5;
+    }
+    100% {
+        opacity: 1;
+    }
 }
 
 .result-info {

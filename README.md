@@ -1,5 +1,7 @@
 # createmycoin
 一个能发行发行自己数字货币的项目。
+水龙头：https://cloud.google.com/application/web3/faucet/ethereum/sepolia
+学习：https://www.createmytoken.com
 
 # CreateMyCoin 系统设计文档 v1.0
 
