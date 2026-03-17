@@ -381,6 +381,38 @@ const supportedNetworks = {
         rpcUrl: 'https://mainnet.infura.io/v3/',
         explorer: 'https://etherscan.io',
         currency: 'ETH'
+    },
+    // 新增 Optimism 主网
+    optimism: {
+        chainId: 10,
+        name: 'Optimism 主网',
+        rpcUrl: 'https://mainnet.optimism.io',
+        explorer: 'https://optimistic.etherscan.io',
+        currency: 'ETH'
+    },
+    // 新增 Optimism Sepolia 测试网（421614）
+    optimismSepolia: {
+        chainId: 421614,
+        name: 'Optimism Sepolia 测试网',
+        rpcUrl: 'https://sepolia.optimism.io',
+        explorer: 'https://sepolia-optimism.etherscan.io',
+        currency: 'ETH'
+    },
+    // 新增 Base 主网
+    base: {
+        chainId: 8453,
+        name: 'Base 主网',
+        rpcUrl: 'https://mainnet.base.org',
+        explorer: 'https://basescan.org',
+        currency: 'ETH'
+    },
+    // 新增 Base Sepolia 测试网
+    baseSepolia: {
+        chainId: 84532,
+        name: 'Base Sepolia 测试网',
+        rpcUrl: 'https://sepolia.base.org',
+        explorer: 'https://sepolia.basescan.org',
+        currency: 'ETH'
     }
 };
 
@@ -498,6 +530,10 @@ async function addNetwork(chainId) {
 function getNetworkName(chainId) {
     const networks = {
         1: 'Ethereum 主网',
+        10: 'Optimism 主网',
+        421614: 'Optimism Sepolia 测试网', // 新增
+        8453: 'Base 主网',
+        84532: 'Base Sepolia 测试网',    // 新增
         5: 'Goerli 测试网',
         11155111: 'Sepolia 测试网',
         137: 'Polygon',
@@ -505,6 +541,7 @@ function getNetworkName(chainId) {
     };
     return networks[chainId] || `未知网络 (${chainId})`;
 }
+
 
 // 新增：显示支持的网络提示
 function showSupportedNetworksPrompt() {
@@ -694,6 +731,10 @@ function viewOnExplorer(address, chain) {
         sepolia: 'https://sepolia.etherscan.io/address/',
         goerli: 'https://goerli.etherscan.io/address/',
         mainnet: 'https://etherscan.io/address/',
+        optimism: 'https://optimistic.etherscan.io/address/',          // 新增
+        optimismSepolia: 'https://sepolia-optimism.etherscan.io/address/', // 新增
+        base: 'https://basescan.org/address/',                        // 新增
+        baseSepolia: 'https://sepolia.basescan.org/address/',         // 新增
         polygon: 'https://polygonscan.com/address/',
         bsc: 'https://bscscan.com/address/'
     };

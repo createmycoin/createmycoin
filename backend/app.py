@@ -10,6 +10,11 @@ from flask_cors import CORS
 
 from database import db, Project
 
+import os
+import json
+import subprocess
+from datetime import datetime
+
 # 加载环境变量
 load_dotenv()
 
@@ -169,6 +174,83 @@ def get_stats():
 
 
 def compile_contract():
+    """编译合约，返回字节码和ABI（指定solc.exe绝对路径版本）"""
+    try:
+        # ========== 核心修改：指定solc.exe的绝对路径 ==========
+        # 替换为你实际的solc.exe路径，示例路径仅供参考
+        SOLC_EXE_PATH = r"D:\Git\github\createmycoin\createmycoin\backend\solc.exe"
+
+        # ========== 原有路径配置（保留） ==========
+        # 合约文件路径（根据你的项目结构调整，确保路径正确）
+        CONTRACT_PATH = os.path.join(os.path.dirname(__file__), 'contract_template.sol')
+        # 编译输出目录
+        COMPILED_DIR = os.path.join(os.path.dirname(__file__), 'compiled')
+        # 确保编译目录存在
+        os.makedirs(COMPILED_DIR, exist_ok=True)
+
+        # 查找 node_modules 路径（OpenZeppelin库）
+        base_dir = os.path.dirname(os.path.dirname(__file__))  # 项目根目录
+        node_modules_path = os.path.join(base_dir, 'node_modules')
+
+        # ========== 检查solc.exe是否存在 ==========
+        if not os.path.exists(SOLC_EXE_PATH):
+            print(f"❌ 找不到solc.exe，请检查路径：{SOLC_EXE_PATH}")
+            return None
+
+        # ========== 构建编译命令（使用指定的solc.exe路径） ==========
+        cmd = [
+            SOLC_EXE_PATH,  # 关键：替换为solc.exe绝对路径，不再用系统的solc命令
+            '--bin',
+            '--abi',
+            '--optimize',
+            '--overwrite',
+            '--include-path', node_modules_path,  # 添加OpenZeppelin库路径
+            '--base-path', base_dir,  # 基础路径
+            '-o', COMPILED_DIR,
+            CONTRACT_PATH
+        ]
+
+        # 执行编译命令
+        result = subprocess.run(cmd, capture_output=True, text=True)
+
+        if result.returncode != 0:
+            print(f"编译错误: {result.stderr}")
+            return None
+
+        # ========== 读取编译结果（原有逻辑保留） ==========
+        contract_name = "CreateMyCoinToken"
+        bin_file = os.path.join(COMPILED_DIR, f"{contract_name}.bin")
+        abi_file = os.path.join(COMPILED_DIR, f"{contract_name}.abi")
+
+        if os.path.exists(bin_file) and os.path.exists(abi_file):
+            with open(bin_file, 'r') as f:
+                bytecode = '0x' + f.read().strip()
+            with open(abi_file, 'r') as f:
+                abi = json.load(f)
+
+            contract_info = {
+                'bytecode': bytecode,
+                'abi': abi,
+                'contractName': contract_name,
+                'compilerVersion': 'v0.8.20',
+                'updatedAt': datetime.now().isoformat()
+            }
+
+            with open(os.path.join(COMPILED_DIR, 'contract_info.json'), 'w') as f:
+                json.dump(contract_info, f, indent=2)
+
+            print("✅ 合约编译成功！")
+            return contract_info
+        else:
+            print("❌ 编译文件未生成")
+            return None
+
+    except Exception as e:
+        print(f"编译错误: {e}")
+        return None
+
+
+def compile_contract1():
     """编译合约，返回字节码和ABI"""
     try:
         # 获取 OpenZeppelin 库的路径
