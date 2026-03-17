@@ -16,13 +16,17 @@ let CONTRACT_BYTECODE = "";
 let CONTRACT_ABI = [];
 let contractInfoLoaded = false;
 
+let 合约地址_新代币;
+
 // 页面加载时初始化
 document.addEventListener('DOMContentLoaded', async () => {
+    document.getElementById('disconnect-wallet').addEventListener('click', disconnectWallet);
     await loadContractInfo();
     initEventListeners();
     checkWalletConnection();
     loadRecentProjects();
     setInterval(loadRecentProjects, 30000);
+
 });
 
 // 从后端加载合约信息
@@ -270,6 +274,7 @@ async function connectWallet(isSilent = false) {
     }
 }
 
+
 // 更新钱包UI
 function updateWalletUI(balanceInEth = '0') {
     const statusEl = document.getElementById('wallet-status');
@@ -278,12 +283,16 @@ function updateWalletUI(balanceInEth = '0') {
     statusEl.className = 'status-connected';
 
     const connectBtn = document.getElementById('connect-wallet');
+    const disconnectBtn = document.getElementById('disconnect-wallet');
+
     connectBtn.style.display = 'none';
+    disconnectBtn.style.display = 'inline-block'; // 显示断开按钮
 
     document.getElementById('deploy-token').disabled = false;
 
     updateNetworkInfo(false); // 禁用自动切换
 }
+
 
 // 格式化地址
 function formatAddress(address) {
@@ -983,9 +992,9 @@ async function deployToken() {
 
         await contract.waitForDeployment();
 
-        const contractAddress = await contract.getAddress();
-        document.getElementById('contract-address').textContent = contractAddress;
-        document.getElementById('contract-address').href = `https://${selectedNetwork}.etherscan.io/address/${contractAddress}`;
+        合约地址_新代币 = await contract.getAddress();
+        document.getElementById('contract-address').textContent = 合约地址_新代币;
+        document.getElementById('contract-address').href = `https://${selectedNetwork}.etherscan.io/address/${合约地址_新代币}`;
 
         updateStep('step-confirm', false, true);
 
@@ -998,7 +1007,7 @@ async function deployToken() {
             features: features,
             chain: selectedNetwork,
             chain_id: selectedChainId,
-            contract_address: contractAddress,
+            contract_address: 合约地址_新代币,
             tx_hash: contract.deploymentTransaction().hash,
             deployer_address: userAddress
         });
@@ -1078,4 +1087,98 @@ function resetForm() {
 
     document.getElementById('tx-hash').textContent = '-';
     document.getElementById('contract-address').textContent = '-';
+}
+
+
+// 新增复制功能
+
+// 新增复制功能（适配你的HTML结构）
+const copyBtn = document.getElementById('copy-address-btn');
+copyBtn.addEventListener('click', async () => {
+    try {
+        // 复制合约地址到剪贴板
+        
+        await navigator.clipboard.writeText(合约地址_新代币);
+
+        // 复制成功的视觉反馈
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = '已复制 ✔';
+        copyBtn.style.backgroundColor = '#e6f4ea';
+        copyBtn.style.borderColor = '#9be0b8';
+
+        // 2秒后恢复按钮原始状态
+        setTimeout(() => {
+            copyBtn.textContent = originalText;
+            copyBtn.style.backgroundColor = '#f5f5f5';
+            copyBtn.style.borderColor = '#ccc';
+        }, 2000);
+    } catch (err) {
+        // 兼容老浏览器的降级方案
+        console.error('复制失败:', err);
+        const tempInput = document.createElement('input');
+        tempInput.value = 合约地址_新代币;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+
+        // 同样给出成功提示
+        const originalText = copyBtn.textContent;
+        copyBtn.textContent = '已复制 ✔';
+        setTimeout(() => {
+            copyBtn.textContent = originalText;
+        }, 2000);
+    }
+});
+
+
+// 新增：断开钱包连接
+// 修复：完整的断开钱包连接函数
+function disconnectWallet() {
+    // 1. 重置所有核心全局变量（关键修复）
+    userAddress = null;
+    provider = null;
+    signer = null;
+    walletConnected = false;
+    isConnecting = false;
+    chainId = null;
+    currentProjectId = null;
+
+    // 2. 移除所有钱包监听器（关键修复）
+    if (typeof window.ethereum !== 'undefined') {
+        window.ethereum.removeAllListeners('accountsChanged');
+        window.ethereum.removeAllListeners('chainChanged');
+        window.ethereum.removeAllListeners('disconnect');
+    }
+
+    // 3. 重置UI状态
+    const statusEl = document.getElementById('wallet-status');
+    statusEl.innerHTML = '🔴 未连接钱包';
+    statusEl.className = 'status-disconnected';
+
+    const connectBtn = document.getElementById('connect-wallet');
+    const disconnectBtn = document.getElementById('disconnect-wallet');
+    const switchWalletBtn = document.getElementById('switch-wallet');
+
+    connectBtn.textContent = '连接 MetaMask';
+    connectBtn.onclick = connectWallet; // 重置点击事件
+    connectBtn.style.display = 'inline-block';
+    disconnectBtn.style.display = 'none';
+    if (switchWalletBtn) {
+        switchWalletBtn.style.display = 'none'; // 隐藏切换钱包按钮
+    }
+
+    // 4. 禁用部署按钮并隐藏表单
+    document.getElementById('deploy-token').disabled = true;
+    document.getElementById('token-form').style.display = 'none';
+
+    // 5. 清空网络信息
+    document.getElementById('network-info').innerHTML = '';
+    hideSwitchNetworkButton(); // 隐藏切换网络按钮
+
+    // 6. 清空项目列表（可选，恢复为显示最近项目）
+    loadRecentProjects();
+
+    // 7. 提示用户
+    showNotification('🔌 钱包已成功断开连接', 'info');
 }

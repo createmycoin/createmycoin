@@ -19,8 +19,8 @@ from datetime import datetime
 load_dotenv()
 
 # 创建Flask应用
-app = Flask(__name__)
-CORS(app)  # 允许跨域请求
+create_mycoin_server = Flask(__name__)
+CORS(create_mycoin_server)  # 允许跨域请求
 
 # 合约文件路径
 CONTRACT_PATH = os.path.join(os.path.dirname(__file__), 'contract_template.sol')
@@ -30,17 +30,17 @@ COMPILED_DIR = os.path.join(os.path.dirname(__file__), 'compiled')
 os.makedirs(COMPILED_DIR, exist_ok=True)
 
 # 配置数据库
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///createmycoin.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)
+create_mycoin_server.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///createmycoin.db'
+create_mycoin_server.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(create_mycoin_server)
 
 # 创建数据库表
-with app.app_context():
+with create_mycoin_server.app_context():
     db.create_all()
     print("✅ 数据库初始化完成")
 
 
-@app.route('/api/health', methods=['GET'])
+@create_mycoin_server.route('/api/health', methods=['GET'])
 def health_check():
     """健康检查接口"""
     return jsonify({
@@ -49,7 +49,7 @@ def health_check():
     })
 
 
-@app.route('/api/projects', methods=['POST'])
+@create_mycoin_server.route('/api/projects', methods=['POST'])
 def create_project():
     """创建新项目记录"""
     try:
@@ -88,7 +88,7 @@ def create_project():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/projects/<int:project_id>', methods=['PUT'])
+@create_mycoin_server.route('/api/projects/<int:project_id>', methods=['PUT'])
 def update_project(project_id):
     """更新项目信息（如合约地址、交易哈希）"""
     try:
@@ -120,7 +120,7 @@ def update_project(project_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/projects/<int:project_id>', methods=['GET'])
+@create_mycoin_server.route('/api/projects/<int:project_id>', methods=['GET'])
 def get_project(project_id):
     """获取单个项目信息"""
     try:
@@ -134,7 +134,7 @@ def get_project(project_id):
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/projects', methods=['GET'])
+@create_mycoin_server.route('/api/projects', methods=['GET'])
 def list_projects():
     """获取项目列表，支持按钱包地址过滤"""
     try:
@@ -151,7 +151,7 @@ def list_projects():
         return jsonify({'error': str(e)}), 500
 
 
-@app.route('/api/stats', methods=['GET'])
+@create_mycoin_server.route('/api/stats', methods=['GET'])
 def get_stats():
     """获取平台统计信息"""
     try:
@@ -323,7 +323,7 @@ def get_cached_contract_info():
 
 
 # 在应用启动时尝试编译合约
-with app.app_context():
+with create_mycoin_server.app_context():
     contract_info = get_cached_contract_info()
     if not contract_info:
         print("🔄 正在编译合约...")
@@ -337,7 +337,7 @@ with app.app_context():
 
 
 # 添加合约信息接口
-@app.route('/api/contract-info', methods=['GET'])
+@create_mycoin_server.route('/api/contract-info', methods=['GET'])
 def get_contract_info():
     """提供合约的ABI和字节码"""
     try:
@@ -372,7 +372,7 @@ def get_contract_info():
 
 
 # 添加编译状态检查接口
-@app.route('/api/contract-compile', methods=['POST'])
+@create_mycoin_server.route('/api/contract-compile', methods=['POST'])
 def compile_contract_api():
     """手动触发合约编译"""
     try:
@@ -393,4 +393,4 @@ def compile_contract_api():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    create_mycoin_server.run(debug=True, host='0.0.0.0', port=5000)
